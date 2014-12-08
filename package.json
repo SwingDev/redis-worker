@@ -1,0 +1,43 @@
+{
+  "name": "redisworker",
+  "version": "0.0.1",
+  "description": "Redis Connection Manager",
+  "main": "index.js",
+  "author": "SWINGDEV",
+  "license": "ISC",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://gabrieloczkowski@bitbucket.org/swingdev/redisworker.git"
+  },
+  "keywords": [
+    "redis",
+    "worker"
+  ],
+  "dependencies": {
+    "async": "^0.9.0",
+    "redisconnectionmanager": "git+ssh://git@bitbucket.org:swingdev/redisconnectionmanager.git"
+  },
+  "devDependencies": {
+    "coffeelint": "^1.6.1",
+    "del": "^0.1.3",
+    "fs": "0.0.2",
+    "glob": "^4.0.6",
+    "gulp": "^3.8.10",
+    "gulp-chmod": "^1.2.0",
+    "gulp-coffee": "^2.2.0",
+    "gulp-coffeelint": "^0.4.0",
+    "gulp-concat": "^2.4.1",
+    "gulp-plumber": "^0.6.6",
+    "gulp-sass": "^1.1.0",
+    "gulp-sourcemaps": "^1.2.8",
+    "gulp-uglify": "^1.0.1",
+    "gulp-util": "^3.0.1",
+    "gulp-watch": "^1.2.0",
+    "map-stream": "0.0.5",
+    "merge-stream": "^0.1.6",
+    "run-sequence": "^1.0.1"
+  }
+}
