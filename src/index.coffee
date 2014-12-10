@@ -1,5 +1,5 @@
 async   = require('async')
-RedisConnectionManager = require("redisconnectionmanager")
+RedisConnectionManager = require("redis-connection-manager")
 
 
 ERR_DRY_POOL = 'DRY_POOL'

@@ -1,7 +1,7 @@
 {
-  "name": "redisworker",
+  "name": "redis-worker",
   "version": "0.0.1",
-  "description": "Redis Connection Manager",
+  "description": "Redis Worker",
   "main": "index.js",
   "author": "SWINGDEV",
   "license": "ISC",
@@ -10,7 +10,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://gabrieloczkowski@bitbucket.org/swingdev/redisworker.git"
+    "url": "http://bitbucket.org/swingdev/redis-worker.git"
   },
   "keywords": [
     "redis",
@@ -18,7 +18,7 @@
   ],
   "dependencies": {
     "async": "^0.9.0",
-    "redisconnectionmanager": "git+ssh://git@bitbucket.org:swingdev/redisconnectionmanager.git"
+    "redis-connection-manager": "git+ssh://git@bitbucket.org:swingdev/redis-connection-manager.git"
   },
   "devDependencies": {
     "coffeelint": "^1.6.1",
