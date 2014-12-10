@@ -37,7 +37,7 @@ gulp.task('compile_src', function() {
           .pipe(coffee({bare: true}))
           .pipe(sourcemaps.write())
           .pipe(gulp.dest('./lib/')),
-          gulp.src(['./lib/**/*', '!./lib/**/*.coffee'])
+          gulp.src(['./src/**/*', '!./src/**/*.coffee'])
           .pipe(plumber({errorHandler: onError}))
           .pipe(gulp.dest('./lib/')))
 });
