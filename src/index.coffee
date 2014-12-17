@@ -1,5 +1,5 @@
 async   = require('async')
-RedisConnectionManager = require("redis-connection-manager")
+RedisConnectionManager = require("redis-connection-manager").RedisConnectionManager
 
 
 ERR_DRY_POOL = 'DRY_POOL'
@@ -57,6 +57,7 @@ class Worker
   waitForTasks: (cb) ->
     @obtainChannelClient (err, client) =>
       return cb(err) if err
+
       @checkAndRunTask()
 
       client.on 'message', (channel, message) =>
