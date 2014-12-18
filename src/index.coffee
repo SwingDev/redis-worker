@@ -1,13 +1,15 @@
 async   = require('async')
 RedisConnectionManager = require("redis-connection-manager").RedisConnectionManager
+errors = require('./errors')
 
+createError = errors.createError
+WorkerError = errors.WorkerError
+ERR_DRY_POOL = errors.ERR_DRY_POOL
 
-ERR_DRY_POOL = 'DRY_POOL'
 
 class Worker
   constructor: (@url) ->
     throw new Error('You must create Worker with Redis Url') unless @url
-    return
 
   name: () ->
     throw new Error('You must overwrite Worker#name in subclass')
@@ -22,29 +24,27 @@ class Worker
   # Internal
   popJobFromQueue: (cb) ->
     @obtainListClient (err, client) =>
-      return cb(err) if err
+      return cb createError(err, 'LISTNOTFOUND') if err
       client.lpop @listKey(), cb
 
-  checkAndRunTask: () ->
+  checkAndRunTask: (cb) ->
     return if @busy
     @busy = true
-    async.forever((next) =>
+    async.forever (next) =>
       @popJobFromQueue (err,task) =>
-        return next(err) if err
+        return next(createError(err, 'POPJOB')) if err
         return next(ERR_DRY_POOL) unless task
         @work task, (err) =>
           if err
-            @error err, task, () -> next()
+            @error err, task, (err) -> next(createError(err, 'RUNTASK'))
           else
             next()
     , (err) =>
       @busy = false
       if (err == ERR_DRY_POOL)
         return
-        # console.log 'no more tasks'
       else if (err)
-        console.log '[Error]', err
-    )
+        return cb err
 
   # Subclass API
   work: () ->
@@ -56,12 +56,15 @@ class Worker
   # API
   waitForTasks: (cb) ->
     @obtainChannelClient (err, client) =>
-      return cb(err) if err
+      return cb createError(err, 'CHANNELNOTFOUND') if err
 
-      @checkAndRunTask()
+      @checkAndRunTask (err) ->
+        cb err if err
 
       client.on 'message', (channel, message) =>
-        @checkAndRunTask() if channel == @channelKey()
+        if channel == @channelKey()
+          @checkAndRunTask (err) ->
+            cb err if err
 
       client.subscribe(@channelKey())
 
@@ -69,14 +72,17 @@ class Worker
 
   pushJob: (jobDict, cb) ->
     payload = JSON.stringify(jobDict)
-    async.series([
-      (callback) => @obtainListClient (err,client) =>
-        return callback(err) if err
-        client.rpush(@listKey(), payload, callback)
-      (callback) => @obtainListClient (err,client) =>
-        return callback(err) if err
-        client.publish(@channelKey(), payload, callback)
-    ], (err) -> cb(err))
+    async.series [
+      (callback) =>
+        @obtainListClient (err,client) =>
+          return callback(createError(err, 'LISTNOTFOUND')) if err
+          client.rpush(@listKey(), payload, callback)
+      (callback) =>
+        @obtainListClient (err,client) =>
+          return callback(createError(err, 'LISTNOTFOUND')) if err
+          client.publish(@channelKey(), payload, callback)
+    ], (err) ->
+      cb(createError(err, 'PUSHJOB'))
 
 
 module.exports = Worker
