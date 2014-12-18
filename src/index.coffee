@@ -85,4 +85,7 @@ class Worker
       cb(createError(err, 'PUSHJOB'))
 
 
-module.exports = Worker
+### ###
+# EXPORTS
+exports.Worker = Worker
+exports.WorkerError = WorkerError

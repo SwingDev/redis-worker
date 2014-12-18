@@ -1,9 +1,5 @@
-#_ = require('lodash')
-ErrorHandler = require('error-handler')
-RedisConnectionManager = require("redis-connection-manager")
-
-SError = ErrorHandler.SError
-RedisError = RedisConnectionManager.RedisError
+ErrorHandler  = require('error-handler')
+SError        = ErrorHandler.SError
 
 errCodes = ['CHANNELNOTFOUND', 'LISTNOTFOUND', 'RUNTASK', 'POPJOB', 'PUSHJOB']
 
@@ -35,6 +31,8 @@ class WorkerError extends SError
   name: 'WorkerError'
 
 
+### ###
+# EXPORTS
 exports.createError = createError
 exports.WorkerError = WorkerError
 exports.ERR_DRY_POOL = 'DRY_POOL'
