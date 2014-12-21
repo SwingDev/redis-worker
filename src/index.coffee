@@ -28,7 +28,7 @@ class Worker
       client.lpop @listKey(), cb
 
   checkAndRunTask: (cb) ->
-    return if @busy
+    return cb() if @busy
     @busy = true
     async.forever (next) =>
       @popJobFromQueue (err,task) =>
@@ -42,7 +42,7 @@ class Worker
     , (err) =>
       @busy = false
       if (err == ERR_DRY_POOL)
-        return
+        return cb()
       else if (err)
         return cb err
 
