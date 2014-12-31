@@ -8,8 +8,29 @@ ERR_DRY_POOL = errors.ERR_DRY_POOL
 
 
 class Worker
-  constructor: (@url) ->
+  constructor: (@url, @taskLimit) ->
     throw new Error('You must create Worker with Redis Url') unless @url
+    @taskLimit = 5 unless @taskLimit
+    @taskNo = 0
+    @taskClean = false
+
+    @queue = async.queue((task, callback) =>
+      # console.log '\n\n\ntaskNo' + task
+      # console.log 'tasklimit', @taskLimit
+      # console.log 'concurency val', @queue.concurrency
+      # console.log 'number of tasks in queue', @queue.length()
+      # console.log 'number of tasks running', @queue.running()
+      @checkAndRunTask (err) ->
+        return callback(err) if err
+        callback()
+    , @taskLimit);
+
+    @queue.drain = () =>
+      unless @taskClean
+        @taskNo++
+        @queue.push @taskNo, (err) ->
+          cb(err) if err
+          return
 
   name: () ->
     throw new Error('You must overwrite Worker#name in subclass')
@@ -28,23 +49,17 @@ class Worker
       client.lpop @listKey(), cb
 
   checkAndRunTask: (cb) ->
-    return cb() if @busy
-    @busy = true
-    async.forever (next) =>
-      @popJobFromQueue (err,task) =>
-        return next(createError(err, 'POPJOB')) if err
-        return next(ERR_DRY_POOL) unless task
-        @work task, (err) =>
-          if err
-            @error err, task, (err) -> next(createError(err, 'RUNTASK'))
-          else
-            next()
-    , (err) =>
-      @busy = false
-      if (err == ERR_DRY_POOL)
-        return cb()
-      else if (err)
-        return cb err
+    @popJobFromQueue (err,task) =>
+      return cb(createError(err, 'POPJOB')) if err
+      unless task
+        @taskClean = true
+        return cb() 
+      @work task, (err) =>
+        if err
+          @error err, task, (err) -> cb(createError(err, 'RUNTASK'))
+        else
+          cb()
+
 
   # Subclass API
   work: () ->
@@ -58,13 +73,21 @@ class Worker
     @obtainChannelClient (err, client) =>
       return cb createError(err, 'CHANNELNOTFOUND') if err
 
-      @checkAndRunTask (err) ->
-        cb err if err
+      client.llen @listKey(), (err, length) =>
+        if length > 0
+          for count in [length..1]
+            @taskNo++
+            @queue.push @taskNo, (err) ->
+              cb(err) if err
+              return
 
       client.on 'message', (channel, message) =>
         if channel == @channelKey()
-          @checkAndRunTask (err) ->
-            cb err if err
+          @taskClean = false
+          @taskNo++
+          @queue.push @taskNo, (err) ->
+            cb(err) if err
+            return
 
       client.subscribe(@channelKey())
 
