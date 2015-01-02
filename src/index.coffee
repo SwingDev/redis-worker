@@ -13,6 +13,7 @@ class Worker
     @taskLimit = 5 unless @taskLimit
     @taskNo = 0
     @taskClean = false
+    @errInQueue = false
 
     @queue = async.queue((task, callback) =>
       # console.log '\n\n\ntaskNo' + task
@@ -21,12 +22,18 @@ class Worker
       # console.log 'number of tasks in queue', @queue.length()
       # console.log 'number of tasks running', @queue.running()
       @checkAndRunTask (err) ->
-        return callback(err) if err
+        if err
+          @errInQueue = true
+          console.error 'Error at worker queue', err
+          setTimeout(() ->
+            process.exit(-1)
+          , 15000)
+          return callback(err)
         callback()
-    , @taskLimit);
+    , @taskLimit)
 
     @queue.drain = () =>
-      unless @taskClean
+      if not @taskClean and not @errInQueue
         @taskNo++
         @queue.push @taskNo, (err) ->
           cb(err) if err
@@ -53,7 +60,7 @@ class Worker
       return cb(createError(err, 'POPJOB')) if err
       unless task
         @taskClean = true
-        return cb() 
+        return cb()
       @work task, (err) =>
         if err
           @error err, task, (err) -> cb(createError(err, 'RUNTASK'))
@@ -83,11 +90,12 @@ class Worker
 
       client.on 'message', (channel, message) =>
         if channel == @channelKey()
-          @taskClean = false
-          @taskNo++
-          @queue.push @taskNo, (err) ->
-            cb(err) if err
-            return
+          unless @errInQueue
+            @taskClean = false
+            @taskNo++
+            @queue.push @taskNo, (err) ->
+              cb(err) if err
+              return
 
       client.subscribe(@channelKey())
 
