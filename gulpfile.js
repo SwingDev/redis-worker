@@ -36,10 +36,10 @@ gulp.task('compile_src', function() {
           .pipe(sourcemaps.init())
           .pipe(coffee({bare: true}))
           .pipe(sourcemaps.write())
-          .pipe(gulp.dest('./lib/')),
+          .pipe(gulp.dest('./')),
           gulp.src(['./src/**/*', '!./src/**/*.coffee'])
           .pipe(plumber({errorHandler: onError}))
-          .pipe(gulp.dest('./lib/')))
+          .pipe(gulp.dest('./')))
 });
 
 gulp.task('compile', function(callback) {
