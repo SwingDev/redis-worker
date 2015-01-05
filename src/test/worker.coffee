@@ -299,3 +299,143 @@ describe 'redis-worker tests', () ->
           expect(Math.stDev doneTasks).to.be.below(tasksNumber / 100.0)
 
           done err
+
+    it 'should use all concurrency slots at all times', (done) ->
+      tasksNumber  = 2000
+      concurrency  = 10
+      workersCount = 5
+
+      workers = []
+      async.map [1..workersCount], (idx, next) ->
+        worker = createWorker "same_id3", concurrency
+        cleanWorker worker, (err) ->
+          next err, worker
+      , (err, workers) ->
+        autofinishJobIn50msFactory = (worker) ->
+          (id) ->
+            setTimeout () ->
+              worker.finishTask(id)
+            , (40 + Math.random() * 40)
+
+        for worker in workers
+          worker.autofinishJobIn50ms = autofinishJobIn50msFactory(worker)
+          worker.emitter.on 'running', worker.autofinishJobIn50ms
+
+        countAllDoneTasks    = () -> _.reduce workers, ((sum, worker) -> sum + worker.doneTasks.length), 0
+        summarizeAllRunningTasks = () -> _.map workers, (worker) -> worker.runningTasks.length
+
+        workersRunningTasksProfile  = []
+        profilerTimerJob = setInterval () ->
+          workersRunningTasksProfile.push summarizeAllRunningTasks()
+        , 10
+
+        async.series [
+          (next) ->
+            async.each [1..tasksNumber], (id, innerNext) ->
+              workers[0].pushJob { id: "B#{id}" }, innerNext
+            , next
+          (next) ->
+            async.each workers, (worker, innerNext) ->
+              worker.waitForTasks innerNext
+            , next
+          (next) ->
+            waitUntil () ->
+              countAllDoneTasks() == tasksNumber
+            , next,
+        ], (err) ->
+          for worker in workers
+            worker.emitter.removeListener 'running', worker.autofinishJobIn50ms
+          clearInterval profilerTimerJob
+
+          runningTasksMeanPerWorker  = []
+          runningTasksStDevPerWorker = []
+          for workerIdx in [0...workers.length]
+            workerRunningTasksProfile = _.map workersRunningTasksProfile, (runningTasksProfile) -> runningTasksProfile[workerIdx]
+            workerRunningTasksProfileOnlyMidPoints = workerRunningTasksProfile[10..-20]
+
+            runningTasksMeanPerWorker.push  Math.mean(workerRunningTasksProfileOnlyMidPoints)
+            runningTasksStDevPerWorker.push Math.stDev(workerRunningTasksProfileOnlyMidPoints)
+
+          expect(_.min runningTasksMeanPerWorker).to.be.above(concurrency * 0.9)
+          expect(_.max runningTasksStDevPerWorker).to.be.below(concurrency * 0.1)
+
+          done err
+
+    it 'should not use redis more than necessary', (done) ->
+      tasksNumberPerWorker = 200
+      concurrency  = 5
+      workersCount = 3
+
+      workers = []
+      async.map [1..workersCount], (idx, next) ->
+        worker = createWorker "test1_worker#{idx}", concurrency
+
+        # Setup redis call spy.
+        sinon.spy worker, 'popJobFromQueue'
+
+        # Prepare worker.
+        cleanWorker worker, (err) ->
+          return next err if err
+
+          worker.waitForTasks (err) ->
+            next err, worker
+      , (err, workers) ->
+        autofinishJobIn50msFactory = (worker) ->
+          (id) ->
+            setTimeout () ->
+              worker.finishTask(id)
+            , (40 + Math.random() * 40)
+
+        for worker in workers
+          worker.autofinishJobIn50ms = autofinishJobIn50msFactory(worker)
+          worker.emitter.on 'running', worker.autofinishJobIn50ms
+
+        countAllDoneTasks = () -> _.reduce workers, ((sum, worker) -> sum + worker.doneTasks.length), 0
+
+        async.series [
+          (next) ->
+            # Add 'tasksNumberPerWorker' tasks for each of the (separate!) workers
+            async.each workers, (worker, innerNext) ->
+              async.each [1..tasksNumberPerWorker], (id, innerInnerNext) ->
+                worker.pushJob { id: "A#{id}" }, innerInnerNext
+              , innerNext
+            , next
+          (next) ->
+            # Wait till they finish.
+            waitUntil () ->
+              countAllDoneTasks() == tasksNumberPerWorker * workersCount
+            , next,
+          (next) ->
+            # Add 'tasksNumberPerWorker' tasks for only one of the workers
+            async.each [1..tasksNumberPerWorker], (id, innerNext) ->
+              workers[0].pushJob { id: "B#{id}" }, innerNext
+            , next
+            # Add 'tasksNumberPerWorker' tasks for only one of the workers
+            async.each [1..tasksNumberPerWorker], (id, innerNext) ->
+              workers[1].pushJob { id: "B#{id}" }, innerNext
+            , next
+          (next) ->
+            # Wait till it's finished.
+            waitUntil () ->
+              workers[0].doneTasks.length == 2 * tasksNumberPerWorker and workers[1].doneTasks.length == 2 * tasksNumberPerWorker
+            , next,
+          (next) ->
+            # Add 'tasksNumberPerWorker' tasks for only one of the workers
+            async.each [1..tasksNumberPerWorker], (id, innerNext) ->
+              workers[2].pushJob { id: "C#{id}" }, innerNext
+            , next
+          (next) ->
+            # Wait till it's finished.
+            waitUntil () ->
+              workers[2].doneTasks.length == 2 * tasksNumberPerWorker
+            , next,
+        ], (err) ->
+          # Cleanup
+          for worker in workers
+            # Count number of times redis was called.
+            expect(worker.popJobFromQueue.callCount).to.be.below(worker.doneTasks.length * 1.2)
+
+            worker.emitter.removeListener 'running', worker.autofinishJobIn50ms
+            worker.popJobFromQueue.restore()
+
+          done err
