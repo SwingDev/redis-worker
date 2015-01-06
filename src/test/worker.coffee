@@ -284,7 +284,7 @@ describe 'redis-worker tests', () ->
               workers[0].pushJob { id: "B#{id}" }, innerNext
             , next
           (next) ->
-            async.each workers, (worker, innerNext) ->
+            async.eachSeries workers, (worker, innerNext) ->
               worker.waitForTasks innerNext
             , next
           (next) ->
