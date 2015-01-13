@@ -10,18 +10,18 @@ ERR_DRY_POOL = errors.ERR_DRY_POOL
 class Worker
   constructor: (@url, @taskLimit) ->
     throw new Error('You must create Worker with Redis Url') unless @url
-    @taskLimit = 5 unless @taskLimit
-    @taskNo = 0
-    @taskClean = false
+    @taskLimit = 2 unless @taskLimit
+    @taskNo = 1
+    @redisQueueEmpty = false
     @errInQueue = false
 
     @queue = async.queue((task, callback) =>
-      # console.log '\n\n\ntaskNo' + task
-      # console.log 'tasklimit', @taskLimit
-      # console.log 'concurency val', @queue.concurrency
-      # console.log 'number of tasks in queue', @queue.length()
-      # console.log 'number of tasks running', @queue.running()
-      @checkAndRunTask (err) ->
+      # console.log '\n>>>>> QUEUE'
+      # console.log '>>>>> tasklimit', @taskLimit
+      # console.log '>>>>> concurency val', @queue.concurrency
+      # console.log '>>>>> number of tasks in queue', @queue.length()
+      # console.log '>>>>> number of tasks running', @queue.running(), '\n'
+      @checkAndRunTask (err) =>
         if err
           @errInQueue = true
           console.error 'Error at worker queue', err
@@ -29,15 +29,11 @@ class Worker
             process.exit(-1)
           , 15000)
           return callback(err)
-        callback()
-    , @taskLimit)
 
-    @queue.drain = () =>
-      if not @taskClean and not @errInQueue
-        @taskNo++
-        @queue.push @taskNo, (err) ->
-          cb(err) if err
-          return
+        callback()
+        @_fetchJobFromRedisToQueue()
+
+    , @taskLimit)
 
   name: () ->
     throw new Error('You must overwrite Worker#name in subclass')
@@ -51,21 +47,27 @@ class Worker
 
   # Internal
   popJobFromQueue: (cb) ->
+    # console.log '>> POPJOB'
     @obtainListClient (err, client) =>
       return cb createError(err, 'LISTNOTFOUND') if err
       client.lpop @listKey(), cb
 
   checkAndRunTask: (cb) ->
+    # console.log '> CHECKRUN'
     @popJobFromQueue (err,task) =>
       return cb(createError(err, 'POPJOB')) if err
       unless task
-        @taskClean = true
+        # console.log '>>> NO MORE TASKS'
+        @redisQueueEmpty = true
         return cb()
+
+      @redisQueueEmpty = false
+      # console.log '>>> TASK START JOB'
       @work task, (err) =>
-        if err
-          @error err, task, (err) -> cb(createError(err, 'RUNTASK'))
-        else
-          cb()
+        return cb() unless err
+        @error err, task, (err) -> 
+          cb(createError(err, 'RUNTASK'))
+
 
 
   # Subclass API
@@ -81,27 +83,20 @@ class Worker
       return cb createError(err, 'CHANNELNOTFOUND') if err
 
       client.llen @listKey(), (err, length) =>
-        if length > 0
-          for count in [length..1]
-            @taskNo++
-            @queue.push @taskNo, (err) ->
-              cb(err) if err
-              return
+        @_fetchJobFromRedisToQueue() for idx in [1..(length < @taskLimit) ? length : @taskLimit] if length
 
       client.on 'message', (channel, message) =>
+        # console.log '\n>>>>> MSG', message.substr(38,70), '\n'
         if channel == @channelKey()
-          unless @errInQueue
-            @taskClean = false
-            @taskNo++
-            @queue.push @taskNo, (err) ->
-              cb(err) if err
-              return
+          return unless @_canTakeNewTasks()
+          @_fetchJobFromRedisToQueue(true)
 
       client.subscribe(@channelKey())
 
       cb()
 
   pushJob: (jobDict, cb) ->
+    # console.log 'PUSHJOB'
     payload = JSON.stringify(jobDict)
     async.series [
       (callback) =>
@@ -115,6 +110,21 @@ class Worker
     ], (err) ->
       cb(createError(err, 'PUSHJOB'))
 
+  _canTakeNewTasks: () ->
+    return @queue.running()+@queue.length() < @taskLimit
+
+  _fetchJobFromRedisToQueue: (force) ->
+    if (not @redisQueueEmpty or force) and not @errInQueue 
+      tmpTaskNo = @taskNo
+      @queue.push @taskNo, (err) =>
+        # console.log '\n>>>> FINISHED TASK', tmpTaskNo, '\n'
+        return
+      # console.log '>>>>> FETCHED job and added to QUEUE'
+      # console.log 'taskNo', @taskNo
+      # console.log 'taskLimit', @taskLimit
+      # console.log 'can take new tasks', @_canTakeNewTasks()
+      @taskNo++
+ 
 
 ### ###
 # EXPORTS
