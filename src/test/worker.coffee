@@ -75,6 +75,11 @@ class TestWorker extends Worker
 
     @maxRunningAtOnce = Math.max(@maxRunningAtOnce, @runningTasks.length)
 
+  error: (err, task, done) ->
+    #console.log '[Error]', err if err
+    done()
+
+
 createWorker = (workerID, taskLimit) ->
   worker = new TestWorker "redis://localhost:6379/32", taskLimit
   worker.workerID = workerID
@@ -94,6 +99,7 @@ cleanWorker = (worker, callback) ->
 
 concurrency1Worker = null
 concurrency2Worker = null
+
 before (done) ->
   sinon.stub(redis, 'createClient', fakeredis.createClient)
 
@@ -130,13 +136,134 @@ waitUntil = (testFunc, callback) ->
 Math.mean = (array) -> (_.reduce array, (a, b) -> a+b) / array.length
 
 Math.stDev = (array) ->
-    mean = Math.mean array
-    dev  = _.map array, (itm) -> (itm-mean) * (itm-mean)
+  mean = Math.mean array
+  dev  = _.map array, (itm) -> (itm-mean) * (itm-mean)
 
-    return Math.sqrt Math.mean(dev)
+  return Math.sqrt Math.mean(dev)
 
 describe 'redis-worker tests', () ->
-  describe 'normal tests', () ->
+  describe 'normal tests', () ->    
+    it 'should exit process on unhandled exc. letting all running tasks finish', (done) ->
+      concurrency = 5
+      excThrowingTaskId = null
+
+      processExit = (code) ->
+        try
+          expect(worker.runningTasks).to.eql [excThrowingTaskId]
+          expect(worker.doneTasks.length).to.equal (concurrency - 1)
+          expect(worker.failedTasks.length).to.equal 0
+
+          done()
+        catch err
+          done err  
+        finally
+          process.exit.restore()
+
+      sinon.stub(process, 'exit', processExit)
+
+      worker = createWorker "exit_test_1", concurrency
+      autofinishJob = (id) ->
+        if worker.runningTasks.length > (concurrency - 1)
+          excThrowingTaskId = id
+          throw new Error "Unhandled exception mock."
+
+        setTimeout () ->
+          worker.finishTask(id)
+        , (1000 + Math.random() * 500)
+
+      worker.emitter.on 'running', autofinishJob
+
+      async.series [
+        (next) -> cleanWorker worker, next,
+        (next) -> worker.waitForTasks next,
+        (next) -> 
+          async.each [1..concurrency], (id, innerNext) ->
+            worker.pushJob { id: id }, innerNext
+          , next
+      ], (err) ->
+        return done err if err
+
+    it 'should exit process on two unhandled exc. letting all running tasks finish', (done) ->
+      concurrency = 5
+      excThrowingTaskIds = []
+
+      processExit = (code) ->
+        try
+          expect(worker.runningTasks).to.eql excThrowingTaskIds
+          expect(worker.doneTasks.length).to.equal (concurrency - 2)
+          expect(worker.failedTasks.length).to.equal 0
+
+          done()
+        catch err
+          done err  
+        finally
+          process.exit.restore()
+
+      sinon.stub(process, 'exit', processExit)
+
+      worker = createWorker "exit_test_1", concurrency
+      autofinishJob = (id) ->
+        if worker.runningTasks.length > (concurrency - 2)
+          excThrowingTaskIds.push id
+          throw new Error "Unhandled exception mock."
+
+        setTimeout () ->
+          worker.finishTask(id)
+        , (1000 + Math.random() * 500)
+
+      worker.emitter.on 'running', autofinishJob
+
+      async.series [
+        (next) -> cleanWorker worker, next,
+        (next) -> worker.waitForTasks next,
+        (next) -> 
+          async.each [1..concurrency], (id, innerNext) ->
+            worker.pushJob { id: id }, innerNext
+          , next
+      ], (err) ->
+        return done err if err
+
+    it 'should exit process on unhandled exc. killing all running tasks if they don\'t manage to finish on time', (done) ->
+      concurrency = 5
+      excThrowingTaskId = null
+
+      processExit = (code) ->
+        try
+          expect(worker.runningTasks).to.eql [1..concurrency]
+          expect(worker.doneTasks.length).to.equal 0
+          expect(worker.failedTasks.length).to.equal 0
+
+          done()
+        catch err
+          done err  
+        finally
+          process.exit.restore()
+
+      sinon.stub(process, 'exit', processExit)
+
+      worker = createWorker "exit_test_1", concurrency
+      worker.gracefulShutdownTimeout = 1000
+      autofinishJob = (id) ->
+        if worker.runningTasks.length > (concurrency - 1)
+          excThrowingTaskId = id
+          throw new Error "Unhandled exception mock."
+
+        setTimeout () ->
+          worker.finishTask(id)
+        , (150000 + Math.random() * 500)
+
+      worker.emitter.on 'running', autofinishJob
+
+      async.series [
+        (next) -> cleanWorker worker, next,
+        (next) -> worker.waitForTasks next,
+        (next) -> 
+          async.each [1..concurrency], (id, innerNext) ->
+            worker.pushJob { id: id }, innerNext
+          , next
+      ], (err) ->
+        return done err if err
+
     it 'should queue up a job and do it', (done) ->
       async.series [
         (next) -> concurrency1Worker.pushJob { id: "1" }, next,
@@ -357,8 +484,8 @@ describe 'redis-worker tests', () ->
             runningTasksStDevPerWorker.push Math.stDev(workerRunningTasksProfileOnlyMidPoints)
 
           expect(_.min runningTasksMeanPerWorker).to.be.above(concurrency * 0.9)
-          expect(_.max runningTasksStDevPerWorker).to.be.below(concurrency * 0.1)
-
+          expect(_.max runningTasksStDevPerWorker).to.be.below(concurrency * 0.2)
+            
           done err
 
     it 'should not use redis more than necessary', (done) ->
