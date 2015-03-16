@@ -19,11 +19,13 @@
   ],
   "dependencies": {
     "async": "^0.9.0",
-    "error-handler": "git+ssh://git@bitbucket.org:swingdev/error-handler.git",
     "lodash": "^2.4.1",
     "redis": "^0.12.1",
-    "redis-connection-manager": "git+ssh://git@bitbucket.org:swingdev/redis-connection-manager.git"
   },
+  "peerDependencies": {
+    "error-handler": "git+ssh://git@bitbucket.org:swingdev/error-handler.git",
+    "redis-connection-manager": "git+ssh://git@bitbucket.org:swingdev/redis-connection-manager.git"
+  },  
   "devDependencies": {
     "chai": "^1.10.0",
     "coffeelint": "^1.6.1",
