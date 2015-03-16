@@ -1,4 +1,4 @@
-ErrorHandler  = require('error-handler')
+ErrorHandler  = require.main.require('error-handler')
 SError        = ErrorHandler.SError
 
 errCodes = ['CHANNELNOTFOUND', 'LISTNOTFOUND', 'RUNTASK', 'POPJOB', 'PUSHJOB']
