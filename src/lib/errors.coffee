@@ -4,7 +4,7 @@ SError        = ErrorHandler.SError
 errCodes = ['CHANNELNOTFOUND', 'LISTNOTFOUND', 'RUNTASK', 'POPJOB', 'PUSHJOB']
 
 createError = (err, errCode) ->
-  return null unless err
+  return null unless err or errCode
 
   if errCode
     switch errCode
@@ -19,7 +19,7 @@ createError = (err, errCode) ->
       when 'PUSHJOB'
         return new WorkerError('Push job to queue was unsuccessful', err)
       else
-        return new WorkerError(null, err)
+        return new WorkerError(errCode, err)
   else
     return new WorkerError(null, err)
 
