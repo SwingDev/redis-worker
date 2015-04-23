@@ -72,7 +72,7 @@ class Worker
   checkAndRunTask: (cb) ->
     # console.log '> CHECKRUN'
     @popJobFromQueue (err,task) =>
-      return cb(createError(err, 'POPJOB')) if err
+      return cb createError(err, 'POPJOB') if err
       unless task
         # console.log '>>> NO MORE TASKS'
         @redisQueueEmpty = true
@@ -87,7 +87,8 @@ class Worker
 
         return cb() unless err
         @error err, task, (err) ->
-          cb(createError(err, 'RUNTASK'))
+          return cb createError(err, 'RUNTASK') if err
+          cb null
 
   # Subclass API
   work: () ->
@@ -148,14 +149,15 @@ class Worker
     async.series [
       (callback) =>
         @obtainListClient (err,client) =>
-          return callback(createError(err, 'LISTNOTFOUND')) if err
+          return callback createError(err, 'LISTNOTFOUND') if err
           client.rpush(@listKey(), payload, callback)
       (callback) =>
         @obtainListClient (err,client) =>
-          return callback(createError(err, 'LISTNOTFOUND')) if err
+          return callback createError(err, 'LISTNOTFOUND') if err
           client.publish(@channelKey(), payload, callback)
     ], (err) ->
-      cb(createError(err, 'PUSHJOB'))
+      return cb createError(err, 'PUSHJOB') if err
+      cb null
 
   _canTakeNewTasks: () ->
     return @queue.running()+@queue.length() < @taskLimit

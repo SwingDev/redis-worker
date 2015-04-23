@@ -4,7 +4,7 @@ SError        = ErrorHandler.SError
 errCodes = ['CHANNELNOTFOUND', 'LISTNOTFOUND', 'RUNTASK', 'POPJOB', 'PUSHJOB']
 
 createError = (err, errCode) ->
-  return null unless err or errCode
+  return null unless err
 
   if errCode
     switch errCode
