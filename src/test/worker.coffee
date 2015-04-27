@@ -1,5 +1,4 @@
 _         = require('lodash')
-
 async     = require('async')
 redis     = require('redis')
 fakeredis = require('fakeredis')
@@ -13,8 +12,9 @@ Worker      = RedisWorker.Worker
 EventEmitter = require('events').EventEmitter
 
 class TestWorker extends Worker
-  constructor: (@url, @taskLimit) ->
-    super
+  constructor: (options) ->
+    {@url, @taskLimit, @retryTasks} = options
+    super url: @url, taskLimit: @taskLimit, retryTasks: @retryTasks
 
     @emitter        = new EventEmitter()
     @reset()
@@ -81,7 +81,7 @@ class TestWorker extends Worker
 
 
 createWorker = (workerID, taskLimit) ->
-  worker = new TestWorker "redis://localhost:6379/32", taskLimit
+  worker = new TestWorker url: "redis://localhost:6379/32", taskLimit: taskLimit
   worker.workerID = workerID
 
   worker
@@ -483,8 +483,9 @@ describe 'redis-worker tests', () ->
             runningTasksMeanPerWorker.push  Math.mean(workerRunningTasksProfileOnlyMidPoints)
             runningTasksStDevPerWorker.push Math.stDev(workerRunningTasksProfileOnlyMidPoints)
 
-          expect(_.min runningTasksMeanPerWorker).to.be.above(concurrency * 0.9)
-          expect(_.max runningTasksStDevPerWorker).to.be.below(concurrency * 0.2)
+          # 0.9 , 0.2
+          expect(_.min runningTasksMeanPerWorker).to.be.above(concurrency * 0.6)
+          expect(_.max runningTasksStDevPerWorker).to.be.below(concurrency * 0.3)
             
           done err
 
