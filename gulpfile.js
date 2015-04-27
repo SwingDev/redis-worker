@@ -49,8 +49,8 @@ gulp.task('compile', function(callback) {
 });
 
 gulp.task("watch", function() {
-  watch(glob.sync('src/**/*.coffee'), function(files, cb) {
-    gulp.start('compile_src', cb);
+  watch(glob.sync('src/**/*.coffee'), function() {
+    gulp.start('compile_src');
   });
 });
 
