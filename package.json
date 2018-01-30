@@ -22,7 +22,7 @@
     "error-handler": "git://github.com/SwingDev/error-handler.git",
     "lodash": "^2.4.2",
     "moment": "^2.10.2",
-    "redis": "^0.12.1",
+    "redis": "^2.8.0",
     "redis-connection-manager": "git://github.com/SwingDev/redis-connection-manager.git"
   },
   "devDependencies": {
